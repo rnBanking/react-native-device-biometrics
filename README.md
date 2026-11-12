@@ -15,6 +15,12 @@ This package is designed to make server authentication using biometrics easier: 
 - Typed `BiometricPromptError` with stable reject codes
 - New Architecture Turbo Module (Swift + Kotlin)
 
+## Requirements
+
+New Architecture only. This package is a codegen Turbo Module and does not include a legacy bridge.
+
+Use React Native 0.76 or newer with the New Architecture enabled, or 0.82 or newer, where the New Architecture is the only architecture. Android `minSdkVersion` must be 24 or higher.
+
 ## Getting started
 
 using either Yarn:
@@ -216,19 +222,43 @@ Throws `BiometricPromptError` if the user cancels or biometrics cannot run.
 
 **Example**
 
+`createKeys` throws `BiometricPromptError` when the user cancels or biometrics cannot run. Cancel and "not available" are usually handled in the UI. Other codes should surface.
+
 ```ts
-import DeviceBiometrics from "react-native-device-biometrics";
+import DeviceBiometrics, {
+  BiometricPromptError,
+  BiometricPromptErrorCode,
+} from "react-native-device-biometrics";
 
 const biometrics = new DeviceBiometrics();
 
-const { publicKey } = await biometrics.createKeys({
-  keyAlias: "BIOMETRIC",
-  requireAuthentication: true,
-  promptMessage: "Confirm fingerprint",
-});
+try {
+  const { publicKey } = await biometrics.createKeys({
+    keyAlias: "BIOMETRIC",
+    requireAuthentication: true,
+    promptMessage: "Confirm fingerprint",
+  });
 
-console.log(publicKey);
-sendPublicKeyToServer(publicKey);
+  sendPublicKeyToServer(publicKey);
+} catch (error) {
+  if (
+    error instanceof BiometricPromptError &&
+    (error.code === BiometricPromptErrorCode.ERROR_USER_CANCELED ||
+      error.code === BiometricPromptErrorCode.ERROR_NEGATIVE_BUTTON)
+  ) {
+    return;
+  }
+
+  if (
+    error instanceof BiometricPromptError &&
+    error.code === BiometricPromptErrorCode.ERROR_BIOMETRY_NOT_AVAILABLE
+  ) {
+    // Face ID was denied, or no biometrics are enrolled.
+    return;
+  }
+
+  throw error;
+}
 ```
 
 ### biometricKeysExist(options?)
@@ -413,6 +443,8 @@ Native rejects are wrapped as `BiometricPromptError`. The `code` field is one of
 
 Cancel and lockout codes are typically handled silently in product UI.
 
+`createKeys` rejects when enrollment cannot finish. `createSignature` rejects when an existing key cannot be used. On Android, `ERROR_KEY_INVALIDATED` only comes from `createSignature`, after the user changes enrolled biometrics.
+
 ```ts
 import DeviceBiometrics, {
   BiometricPromptError,
@@ -420,6 +452,33 @@ import DeviceBiometrics, {
 } from "react-native-device-biometrics";
 
 const biometrics = new DeviceBiometrics();
+
+try {
+  const { publicKey } = await biometrics.createKeys({
+    keyAlias: "BIOMETRIC",
+    requireAuthentication: true,
+    promptMessage: "Confirm it is you",
+  });
+
+  sendPublicKeyToServer(publicKey);
+} catch (error) {
+  if (
+    error instanceof BiometricPromptError &&
+    (error.code === BiometricPromptErrorCode.ERROR_USER_CANCELED ||
+      error.code === BiometricPromptErrorCode.ERROR_NEGATIVE_BUTTON)
+  ) {
+    return;
+  }
+
+  if (
+    error instanceof BiometricPromptError &&
+    error.code === BiometricPromptErrorCode.ERROR_BIOMETRY_NOT_AVAILABLE
+  ) {
+    return;
+  }
+
+  throw error;
+}
 
 try {
   await biometrics.createSignature({
