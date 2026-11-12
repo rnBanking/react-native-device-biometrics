@@ -1,0 +1,72 @@
+{
+  "name": "react-native-device-biometrics",
+  "version": "1.0.0",
+  "description": "React Native Turbo Module for RSA keys in iOS Keychain / Android Keystore, optionally gated by biometrics",
+  "license": "MIT",
+  "author": "DXP",
+  "homepage": "https://github.com/rnBanking/react-native-device-biometrics#readme",
+  "bugs": {
+    "url": "https://github.com/rnBanking/react-native-device-biometrics/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rnBanking/react-native-device-biometrics.git"
+  },
+  "main": "src/index",
+  "react-native": "src/index",
+  "source": "src/index",
+  "files": [
+    "src",
+    "android",
+    "ios",
+    "DeviceBiometrics.podspec",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "biometrics",
+    "keystore",
+    "keychain",
+    "turbo-module"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "types:check": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "dependencies": {
+    "@babel/runtime": "7.26.0"
+  },
+  "devDependencies": {
+    "@babel/core": "7.26.0",
+    "@babel/preset-env": "7.26.0",
+    "@base/eslint-config": "file:../../packages/eslint-config",
+    "@base/typescript-config": "file:../../packages/typescript-config",
+    "eslint": "9.39.4",
+    "react": "19.2.1",
+    "react-native": "0.83.8",
+    "typescript": "5.8.3"
+  },
+  "codegenConfig": {
+    "name": "DeviceBiometricsSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.devicebiometrics"
+    }
+  },
+  "create-react-native-library": {
+    "type": "turbo-module",
+    "languages": "kotlin-objc",
+    "version": "0.56.0"
+  }
+}
