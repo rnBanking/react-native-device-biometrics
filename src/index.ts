@@ -212,7 +212,7 @@ export const BiometricPromptErrorCode = {
   ERROR_AUTHENTICATION_FAILED: "ERROR_AUTHENTICATION_FAILED",
   /** Face ID Don't Allow, biometry not enrolled, or no biometrics enrolled. */
   ERROR_BIOMETRY_NOT_AVAILABLE: "ERROR_BIOMETRY_NOT_AVAILABLE",
-  /** Android: Keystore key invalidated after biometrics enrollment changed. */
+  /** Key invalidated after biometrics enrollment changed. `createSignature` only. */
   ERROR_KEY_INVALIDATED: "ERROR_KEY_INVALIDATED",
   /** Unmapped native code or missing reject code. */
   BIOMETRIC_ERROR: "BIOMETRIC_ERROR",
@@ -366,8 +366,9 @@ export default class DeviceBiometrics {
    *
    * @param options - Alias, UTF-8 payload, and prompt copy.
    * @returns `{ success, signature }` on success. `signature` is standard Base64.
-   * @throws {BiometricPromptError} On cancel, lockout, or Android
+   * @throws {BiometricPromptError} On cancel, lockout, or
    * `ERROR_KEY_INVALIDATED` after biometrics enrollment changed.
+   * That code comes from `createSignature` only.
    */
   createSignature(
     options: CreateSignatureOptions,
