@@ -439,12 +439,3 @@ try {
   throw error;
 }
 ```
-
-## Troubleshooting
-
-- Keys created with `requireAuthentication: true` are invalidated when the user adds or removes a biometric. On Android the Keystore does this. On iOS, keys created by 1.1.0 use `.biometryCurrentSet`, and `createSignature` compares the enrolled set saved at `createKeys`. `createSignature` then throws `ERROR_KEY_INVALIDATED`. Delete the alias and enroll again. `createKeys` does not return that code.
-- Keys created by 1.0.x stay on `.biometryAny` until the next `createKeys`, so a later Face ID or Touch ID change does not invalidate them.
-- Silent `DEVICE` keys and keys created with `allowDeviceCredentials: true` are not part of this check.
-- On iOS Simulator, Face ID is evaluated explicitly before signing so the prompt still appears. Enable Simulator **Features → Face ID**.
-- Public keys and signatures are standard Base64. Compact JWT needs Base64URL (`+`/`/`/`=` → `-`/`_` and no padding).
-- `createKeys` for an alias replaces only that alias. A `DEVICE` key and a `BIOMETRIC` key can coexist.
