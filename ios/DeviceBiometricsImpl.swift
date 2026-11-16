@@ -52,17 +52,15 @@ public class DeviceBiometricsImpl: NSObject {
     DispatchQueue.global(qos: .default).async {
       let requireAuthentication = self.requireAuthentication(from: params)
 
-      let generateKeys = {
-        self.generateKeys(params, resolve: resolve, reject: reject)
-      }
+      let allowDeviceCredentials = self.boolValue(params, "allowDeviceCredentials")
+      let tracksBiometricSet = requireAuthentication && !allowDeviceCredentials
 
       if !requireAuthentication {
-        generateKeys()
+        self.generateKeys(params, domainState: nil, resolve: resolve, reject: reject)
         return
       }
 
       let promptMessage = self.stringValue(params, "promptMessage")
-      let allowDeviceCredentials = self.boolValue(params, "allowDeviceCredentials")
       let authContext = LAContext()
       let policy: LAPolicy = allowDeviceCredentials
         ? .deviceOwnerAuthentication
@@ -84,7 +82,8 @@ public class DeviceBiometricsImpl: NSObject {
 
       authContext.evaluatePolicy(policy, localizedReason: reason) { success, biometricError in
         if success {
-          generateKeys()
+          let domainState = tracksBiometricSet ? authContext.evaluatedPolicyDomainState : nil
+          self.generateKeys(params, domainState: domainState, resolve: resolve, reject: reject)
         } else {
           let nsError = biometricError as NSError?
           reject(
@@ -105,6 +104,7 @@ public class DeviceBiometricsImpl: NSObject {
     reject: @escaping (String?, String?, Error?) -> Void
   ) {
     DispatchQueue.global(qos: .default).async {
+      self.deleteDomainState(params)
       let biometricKeyExists = self.doesBiometricKeyExist(params)
 
       if biometricKeyExists {
@@ -137,6 +137,16 @@ public class DeviceBiometricsImpl: NSObject {
       let payload = self.stringValue(params, "payload")
       let requireAuthentication = self.requireAuthentication(from: params)
       let allowDeviceCredentials = self.boolValue(params, "allowDeviceCredentials")
+
+      if requireAuthentication && !allowDeviceCredentials && self.biometricSetChanged(params) {
+        _ = self.deleteBiometricKey(params)
+        reject(
+          "ERROR_KEY_INVALIDATED",
+          "Biometric enrollment changed",
+          nil
+        )
+        return
+      }
 
       let biometricKeyTag = self.biometricKeyTag(from: params)
       var query: [String: Any] = [
@@ -302,10 +312,12 @@ public class DeviceBiometricsImpl: NSObject {
   }
 
   /// Writes a new RSA 2048 pair into the Keychain and resolves the SPKI
-  /// public key as standard Base64. `.biometryAny` keeps the key valid after
-  /// Face ID re-enrollment; `.userPresence` also accepts device passcode.
+  /// public key as standard Base64. `.biometryCurrentSet` invalidates the key
+  /// after Face ID / Touch ID enrollment changes. `.userPresence` also accepts
+  /// device passcode. `domainState` is saved only for the biometric-only key.
   private func generateKeys(
     _ params: NSDictionary,
+    domainState: Data?,
     resolve: @escaping (Any?) -> Void,
     reject: @escaping (String?, String?, Error?) -> Void
   ) {
@@ -324,7 +336,7 @@ public class DeviceBiometricsImpl: NSObject {
     if requireAuthentication {
       var error: Unmanaged<CFError>?
       let allowDeviceCredentials = boolValue(params, "allowDeviceCredentials")
-      var secCreateFlag: SecAccessControlCreateFlags = .biometryAny
+      var secCreateFlag: SecAccessControlCreateFlags = .biometryCurrentSet
 
       if allowDeviceCredentials {
         secCreateFlag = .userPresence
@@ -374,6 +386,9 @@ public class DeviceBiometricsImpl: NSObject {
 
     let publicKeyDataWithHeader = addHeaderPublickey(publicKeyData)
     let publicKeyString = publicKeyDataWithHeader.base64EncodedString(options: [])
+    if let domainState {
+      saveDomainState(domainState, params: params)
+    }
     resolve(["publicKey": publicKeyString])
   }
 
@@ -388,13 +403,73 @@ public class DeviceBiometricsImpl: NSObject {
     return true
   }
 
+  /// Keychain alias from JS, or `com.rnBanking.biometricKey` when omitted.
+  private func keyAlias(from params: NSDictionary) -> String {
+    if let alias = stringValue(params, "keyAlias"), !alias.isEmpty {
+      return alias
+    }
+    return "com.rnBanking.biometricKey"
+  }
+
   /// Keychain application tag from JS, or `com.rnBanking.biometricKey` when omitted.
   private func biometricKeyTag(from params: NSDictionary) -> Data {
-    var biometricKeyAlias = stringValue(params, "keyAlias")
-    if biometricKeyAlias == nil || biometricKeyAlias?.isEmpty == true {
-      biometricKeyAlias = "com.rnBanking.biometricKey"
+    keyAlias(from: params).data(using: .utf8) ?? Data()
+  }
+
+  /// True only when a saved snapshot and the current snapshot both exist and differ.
+  /// A missing snapshot means a 1.0.x key or a Simulator without Face ID enrolled.
+  private func biometricSetChanged(_ params: NSDictionary) -> Bool {
+    guard let saved = loadDomainState(params), let current = currentDomainState() else {
+      return false
     }
-    return biometricKeyAlias!.data(using: .utf8) ?? Data()
+    return saved != current
+  }
+
+  /// `canEvaluatePolicy` fills `evaluatedPolicyDomainState` without a prompt.
+  private func currentDomainState() -> Data? {
+    let context = LAContext()
+    var error: NSError?
+    guard context.canEvaluatePolicy(
+      .deviceOwnerAuthenticationWithBiometrics,
+      error: &error
+    ) else {
+      return nil
+    }
+    return context.evaluatedPolicyDomainState
+  }
+
+  private func domainStateQuery(_ params: NSDictionary) -> [String: Any] {
+    [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: "com.rnBanking.biometricDomainState",
+      kSecAttrAccount as String: keyAlias(from: params),
+    ]
+  }
+
+  /// Generic-password item so it can be read before the biometric prompt.
+  /// RSA key queries filter `kSecClassKey` and do not see this item.
+  private func saveDomainState(_ data: Data, params: NSDictionary) {
+    deleteDomainState(params)
+    var query = domainStateQuery(params)
+    query[kSecValueData as String] = data
+    query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+    SecItemAdd(query as CFDictionary, nil)
+  }
+
+  private func loadDomainState(_ params: NSDictionary) -> Data? {
+    var query = domainStateQuery(params)
+    query[kSecReturnData as String] = true
+    query[kSecMatchLimit as String] = kSecMatchLimitOne
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess else {
+      return nil
+    }
+    return item as? Data
+  }
+
+  private func deleteDomainState(_ params: NSDictionary) {
+    SecItemDelete(domainStateQuery(params) as CFDictionary)
   }
 
   /// Checks existence without a prompt (`kSecUseAuthenticationUIFail`).
@@ -413,6 +488,7 @@ public class DeviceBiometricsImpl: NSObject {
   }
 
   private func deleteBiometricKey(_ params: NSDictionary) -> OSStatus {
+    deleteDomainState(params)
     let biometricKeyTag = biometricKeyTag(from: params)
     let deleteQuery: [String: Any] = [
       kSecClass as String: kSecClassKey,
