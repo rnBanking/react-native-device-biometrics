@@ -1,6 +1,6 @@
 {
   "name": "react-native-device-biometrics",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "New Architecture-only React Native Turbo Module for RSA keys in iOS Keychain / Android Keystore, optionally gated by biometrics",
   "license": "MIT",
   "author": "DXP",
@@ -21,6 +21,7 @@
     "ios",
     "DeviceBiometrics.podspec",
     "LICENSE",
+    "NOTICE",
     "README.md"
   ],
   "keywords": [
