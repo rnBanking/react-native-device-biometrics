@@ -32,7 +32,9 @@ cd ios && pod install
 
 ## Usage
 
-![Create a key, enroll the public key, sign after biometrics, and verify on the server](docs/biometric-flow.png)
+`requireAuthentication` defaults to `true`. `createKeys` prompts for Face ID, Touch ID, or a fingerprint, then stores the key pair. `createSignature` prompts again before signing. Pass `false` to create and sign a silent device key with no prompt.
+
+![Face ID confirms key creation, the public key is enrolled, signing prompts again, and the server verifies the signature](docs/biometric-flow.png)
 
 Pass `keyAlias` to keep a silent `DEVICE` key and a biometric `BIOMETRIC` key. Creating a key replaces only that alias.
 
